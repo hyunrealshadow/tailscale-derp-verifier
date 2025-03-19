@@ -114,18 +114,15 @@ export default {
 		if (!syncTime || Date.now() - new Date(syncTime).getTime() > 60 * 60 * 1000) {
 			syncTime = new Date().toISOString();
 			await env.KV.put('syncTime', syncTime);
-			nodeKeys = [];
 
 			const tailscaleOAuthApps = JSON.parse(env.TAILSCALE_OAUTH_APPS) as TailscaleOAuthApp[];
-			for (const app of tailscaleOAuthApps) {
+			const devicePromises = tailscaleOAuthApps.map(async (app) => {
 				const token = await oAuthToken(app);
 				const devices = await tailscaleDevices(token, app.organizationName);
-				for (const device of devices) {
-					if (device.nodeKey) {
-						nodeKeys.push(device.nodeKey);
-					}
-				}
-			}
+				return devices.map(device => device.nodeKey).filter((key): key is string => !!key);
+			});
+			const allNodeKeys = await Promise.all(devicePromises);
+			nodeKeys = allNodeKeys.flat();
 			await env.KV.put('nodeKeys', JSON.stringify(nodeKeys));
 		}
 
